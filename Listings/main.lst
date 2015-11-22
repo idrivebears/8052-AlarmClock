@@ -1,0 +1,532 @@
+A51 MACRO ASSEMBLER  MAIN                                                                 11/03/2015 11:16:49 PAGE     1
+
+
+MACRO ASSEMBLER A51 V8.02c
+OBJECT MODULE PLACED IN .\Objects\main.obj
+ASSEMBLER INVOKED BY: C:\Keil_v5\C51\BIN\A51.EXE main.a51 SET(SMALL) DEBUG PRINT(.\Listings\main.lst) OBJECT(.\Objects\m
+                      ain.obj) EP
+
+LOC  OBJ            LINE     SOURCE
+
+                       1     ;======================================================================|
+                       2     ; REPENTINA RELOJ ALARMA, FUNDAMENTOS DE MICROPROCESADORES, ITESO.     |
+                       3     ; AUTORES:                                                             |
+                       4     ;       -ALEJANDRO WALLS        is693215@iteso.mx                      |
+                       5     ;       -MARIO EUGENIO ZUÑIGA   ie693110@iteso.mx                      |
+                       6     ;======================================================================|
+                       7     
+                       8     ;P2.0 - P2.7  Disp Seg
+                       9     ;P3.2 - P3.3  Botones switch y edit
+                      10     ;P1.0 - P1.7  Transistores
+                      11     ;P3.7         Buzzer 
+                      12     
+                      13     
+                      14     
+                      15     ;30H - 39H      BCD map
+                      16     ;3AH            Tick counter 2
+                      17     ;3BH            Tick counter 4
+                      18     ;3CH            Tick counter 250_1
+                      19     ;3DG            Tick counter 250_2
+                      20     ;, 3E           Debouncer counter
+                      21     ;, 3F       unmapped
+                      22     ;40H - 45H      CLKVAL
+                      23     ;46H - 4BH      ALRVAL
+                      24     ;50H - 55H      DISP_X
+                      25     ;56H            CUR_DISP
+                      26     ;60H - 65H      Current value to display
+                      27     
+                      28     
+                      29                     ;TODO
+                      30                     ;Remove interrupts for buttons
+                      31                     ;Figure out ONE COLD
+                      32                     ;Set alarm checking
+                      33                     ;Consider using interrupt for alarm switch button
+                      34                     
+                      35     
+                      36                     ;IE EQU 0A8H                 ;INTERRUPT ENABLE REGISTRY (MAY NOT BE NEEDED)
+                      37                     ;IP EQU 0B8H                 ;INTERRUPT PRIORITY REGISTRY
+  00C8                38                     T2CON EQU 0C8H               ;T2CON registry location
+  00CB                39                     RCAP2H EQU 0CBH              ;reload value for t2 location high
+  00CA                40                     RCAP2L EQU 0CAH              ;reload value for t2 loaction low
+                      41                         
+  00CD                42                     T2H EQU 0CDH                 ;timer 2 value high
+  00CC                43                     T2L EQU 0CCH                 ;timer 2 value low
+                      44                         
+  00A5                45                     INTERRUPTS EQU 10100101b        ;Interrupt flags, Global, Timer2, Button1, 
+                             Button0
+                      46                         
+                      47                     
+  0040                48                     CLKVAL_S_L EQU 40H              ;Clock second value address
+  0041                49                     CLKVAL_S_H EQU 41H              ;Clock second value address
+  0042                50                     CLKVAL_M_L EQU 42H              ;Clock minute value address
+  0043                51                     CLKVAL_M_H EQU 43H              ;Clock minute value address
+  0044                52                     CLKVAL_H_L EQU 44H              ;Clock hour value address
+  0045                53                     CLKVAL_H_H EQU 45H              ;Clock hour value address
+                      54                         
+  0060                55                     ALRVAL_S_L EQU 60H              ;Alarm second value address
+  0061                56                     ALRVAL_S_H EQU 61H              ;Alarm second value address
+A51 MACRO ASSEMBLER  MAIN                                                                 11/03/2015 11:16:49 PAGE     2
+
+  0062                57                     ALRVAL_M_L EQU 62H              ;Alarm minute value address   
+  0063                58                     ALRVAL_M_H EQU 63H              ;Alarm minute value address   
+  0064                59                     ALRVAL_H_L EQU 64H              ;Alarm hour value address
+  0065                60                     ALRVAL_H_H EQU 65H              ;Alarm hour value address
+                      61                         
+  003A                62                     TICKCOUNT_2 EQU 3AH             ;Tick counter for refreshing displays
+  003B                63                     TICKCOUNT_4 EQU 3BH             ;Tick counter for buttons
+  003C                64                     TICKCOUNT_250_1 EQU 3CH         ;Tick counter for seconds 1
+  003D                65                     TICKCOUNT_250_2 EQU 3DH         ;Tick counter for seconds 2
+  003E                66                     DEBOUNCER_COUNT EQU  3EH        ;Counter for debouncer, 20 ms   
+                      67                         
+  0050                68                     DISP_0  EQU 50H                 ;DISP_X will hold the value for the transis
+                             tor arrangement
+  0051                69                     DISP_1  EQU 51H
+  0052                70                     DISP_2  EQU 52H
+  0053                71                     DISP_3  EQU 53H
+  0054                72                     DISP_4  EQU 54H
+  0055                73                     DISP_5  EQU 55H
+                      74                     
+                      75                     
+  0056                76                     CUR_DISP EQU 56H            ;Pointer to current display  (has to be passed 
+                             to RX)
+                      77                         
+  0000                78                     EDIT_OLD_STATE EQU 20H.0    ;deprecated
+  0001                79                     EDIT_NEW_STATE EQU 20H.1    ;deprecated
+                      80                         
+  0002                81                     ALARM_ENABLE EQU 20H.2      ;indicates display is enabled
+  0003                82                     ALARM_ON EQU 20H.3          ;indicates if alarm is on
+                      83                     
+                      84     
+0000                  85                     ORG     0000H               ;RESET INTERRUPT
+0000 803E             86                     JMP     START               ;go to start on reset
+                      87                     
+0003                  88                     ORG     0003H               ;EXT0 INTERRUPT SWITCH BUTTON
+0003 01DD             89                     JMP     EXT0IRS             
+                      90                     
+0013                  91                     ORG     0013H               ;EXT1 INTERRUPT EDIT BUTTON
+0013 01F0             92                     JMP     EXT1IRS             
+                      93                     
+002B                  94                     ORG     002BH               ;T2 INTERRUPT
+002B 01C8             95                     JMP     T2IRS               ;Go to interrupt routine                
+                      96     
+0040                  97                     ORG     0040H
+0040 75A8A5           98     START:          MOV     IE, #INTERRUPTS      ;enable global interrupt, enable timer 2 inter
+                             rupt, enable ext1, enable ext0
+0043 75B820           99                     MOV     IP, #00100000b      ;enable highest priority for timer 2
+0046 75C800          100                     MOV     T2CON, #00000000b   ;reset T2 settings
+                     101                     
+0049 753A02          102                     MOV     TICKCOUNT_2, #2d            ;reset tick count for all counters
+004C 753B04          103                     MOV     TICKCOUNT_4, #4d            
+004F 753CFA          104                     MOV     TICKCOUNT_250_1, #250d
+0052 753DFA          105                     MOV     TICKCOUNT_250_2, #250d
+0055 753E00          106                     MOV     DEBOUNCER_COUNT, #0d
+                     107                     
+                     108                     
+0058 754402          109                     MOV     CLKVAL_H_L, #2d       ;Reset hour low
+005B 754501          110                     MOV     CLKVAL_H_H, #1d       ;Reset hour high
+005E 754200          111                     MOV     CLKVAL_M_L, #0d       ;Reset minute low
+0061 754300          112                     MOV     CLKVAL_M_H, #0d       ;Reset minute high
+0064 754000          113                     MOV     CLKVAL_S_L, #0d       ;Reset second low
+0067 754100          114                     MOV     CLKVAL_S_H, #0d       ;Reset second high
+                     115                     
+                     116                     ;Set alarm to 12:02:00 
+006A 756400          117                     MOV     ALRVAL_H_L, #0d       ;Reset alarm hour low
+006D 756500          118                     MOV     ALRVAL_H_H, #0d       ;Reset alarm hour high
+0070 756200          119                     MOV     ALRVAL_M_L, #0d       ;Reset alarm minute low
+A51 MACRO ASSEMBLER  MAIN                                                                 11/03/2015 11:16:49 PAGE     3
+
+0073 756300          120                     MOV     ALRVAL_M_H, #0d       ;Reset alarm minute high
+0076 756000          121                     MOV     ALRVAL_S_L, #0d       ;Reset alarm second low
+0079 756100          122                     MOV     ALRVAL_S_H, #0d       ;Reset alarm second high
+                     123                     
+007C C200            124                     CLR     EDIT_OLD_STATE   ;old button state starts at 0
+007E C201            125                     CLR     EDIT_NEW_STATE   ;new button state starts at 0
+0080 C202            126                     CLR     ALARM_ENABLE     ;start display on clock
+0082 C203            127                     CLR     ALARM_ON         ;start with alarm off
+                     128                     
+                     129                     
+                     130                     ;7SEGMENT CODES=================
+                     131                     ;Contains the values for the 7 segment display for each digit 
+0084 753040          132                     MOV     30H, #40H       ;0      |         
+0087 753179          133                     MOV     31H, #79H       ;1      |
+008A 753224          134                     MOV     32H, #24H       ;2      |
+008D 753330          135                     MOV     33H, #30H       ;3      |
+0090 753419          136                     MOV     34H, #19H       ;4      |
+0093 753590          137                     MOV     35H, #90H       ;5      |
+0096 753680          138                     MOV     36H, #80H       ;6      |
+0099 753778          139                     MOV     37H, #78H       ;7      |
+009C 753800          140                     MOV     38H, #00H       ;8      |
+009F 753918          141                     MOV     39H, #18H       ;9      |
+                     142                     ;================================
+                     143                     
+                     144                     ;ONE COLD========================
+                     145                     ;Contains the values that must be passed to the transistor port to select t
+                             he display
+00A2 7550FB          146                     MOV     DISP_0, #11111011b       ;
+00A5 7551F7          147                     MOV     DISP_1, #11110111b       ;
+00A8 7552EF          148                     MOV     DISP_2, #11101111b       ;
+00AB 7553DF          149                     MOV     DISP_3, #11011111b       ;
+00AE 7554BF          150                     MOV     DISP_4, #10111111b       ;
+00B1 75557F          151                     MOV     DISP_5, #01111111b       ;
+                     152                     ;================================
+                     153                                                     
+00B4 755655          154                     MOV     CUR_DISP, #DISP_5      ;start current display on DISP_5
+                     155                     
+                     156                     
+00B7 75CBF8          157                     MOV     RCAP2H, #0F8H       ;Load F830H into reload value (65536 - 2000) 2m
+                             s tick
+00BA 75CA30          158                     MOV     RCAP2L, #30H        ; ^
+                     159                     
+00BD 75CDF8          160                     MOV     T2H, #0F8H          ;start timer at reload value
+00C0 75CC30          161                     MOV     T2L, #30H
+                     162                     
+                     163                     
+00C3 75C804          164                     MOV     T2CON, #00000100b   ;Start T2
+00C6 80FE            165                     JMP     $                   ;wait for interrupts
+                     166     
+                     167     ;Timer 2 interrupt=========================================================================
+                             ================================
+                     168     ;Triggered every T2 interrupt
+00C8 C0D0            169     T2IRS:          PUSH    PSW
+00CA C0E0            170                     PUSH    ACC    
+                     171                     ;MOV     IE, #00000000b      ;disable interrupts
+00CC B2CF            172                     CPL     T2CON.7             ;reset T2 settings
+00CE B2CA            173                     CPL     T2CON.2             ;
+00D0 8031            174                     JMP     TICK                ;go to tick routine
+00D2 D0E0            175     EXIT_T2IRS:     POP     ACC                 ;return ACC 
+00D4 D0D0            176                     POP     PSW                 ;return PSW
+00D6 75A8A5          177                     MOV     IE, #INTERRUPTS      ;enable interruptions again
+00D9 75C804          178                     MOV     T2CON, #00000100b   ;Start T2
+00DC 32              179                     RETI
+                     180     
+                     181     ;SWITCH BUTTON (SWITCHED CLK/ALARM DISPLAY=================================================
+                             =================================
+A51 MACRO ASSEMBLER  MAIN                                                                 11/03/2015 11:16:49 PAGE     4
+
+                     182     ;Triggered every ext0 interrupt
+00DD C0D0            183     EXT0IRS:        PUSH    PSW
+00DF C0E0            184                     PUSH    ACC
+00E1 C2A8            185                     CLR     EX0                 ;Disable external0 interrupt
+00E3 C2AA            186                     CLR     EX1                 ;Disable external1 interrupt
+00E5 3185            187                     ACALL   SWITCH_DISP
+00E7 D0E0            188     EXIT_EXT0IRS:   POP     ACC
+00E9 D0D0            189                     POP     PSW
+00EB D2A8            190                     SETB    EX0                 ;reenable ext0 interrupt
+00ED D2AA            191                     SETB    EX1                 ;reenable ext1 interrupt
+00EF 32              192                     RETI
+                     193     
+                     194     ;EDIT BUTTON   (EDITS CLK/ALARM VALUE, INCREASING BY ONE)==================================
+                             =================================
+                     195     ;Triggered every ext1 interrupt
+00F0 C0D0            196     EXT1IRS:        PUSH    PSW                ;save status before entering interrupt
+00F2 C0E0            197                     PUSH    ACC
+00F4 C2A8            198                     CLR     EX0
+00F6 C2AA            199                     CLR     EX1
+00F8 3193            200                     ACALL   EDIT               ;Cal edit subroutine
+00FA D0E0            201     EXIT_EXT1IRS:   POP     ACC                ;load status after interrupt
+00FC D0D0            202                     POP     PSW
+00FE D2A8            203                     SETB    EX0                ;reenable ext0 interrupt
+0100 D2AA            204                     SETB    EX1                ;reenable ext1 interrupt
+0102 32              205                     RETI
+                     206                     
+                     207     ;TICK;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+                             ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+                     208     ;Triggered evertime the clock ticks
+0103 053E            209     TICK:           INC     DEBOUNCER_COUNT             ;Always increase debouncer counter
+0105 3164            210                     ACALL   UPDTDISP                    ;Call update display subroutine
+0107 310D            211                     ACALL   UPDTCLK                     ;Call update clock subroutine
+0109 5104            212                     ACALL   CHECK_ALARM                 ;Check if alarm should be on/off
+010B 80C5            213                     JMP     EXIT_T2IRS                  ;Jump back to interrupt exit
+                     214     
+                     215     ;Update Clock;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+                             ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+                     216     ;Triggered every 500 ticks
+010D D53C0E          217     UPDTCLK:        DJNZ    TICKCOUNT_250_1, END_UPDTCLK
+0110 753C01          218                     MOV     TICKCOUNT_250_1, #1d         ;hack/should probably fix/probably int
+                             roduces inaccuracy
+0113 D53D08          219                     DJNZ    TICKCOUNT_250_2, END_UPDTCLK
+0116 753CFA          220                     MOV     TICKCOUNT_250_1, #250d      ;reset tick count
+0119 753DFA          221                     MOV     TICKCOUNT_250_2, #250d      ;reset tick count 
+011C 311F            222                     ACALL   INC_TIME                    ;call inc time subroutine
+011E 22              223     END_UPDTCLK:    RET
+                     224     
+                     225     ;INCREMENT TIME;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+                             ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+                     226     ;Increments clock value each second
+011F                 227     INC_TIME:        ;SECONDS LOW
+011F 0540            228                     INC     CLKVAL_S_L                  ;increase seconds
+0121 E540            229                     MOV     A, CLKVAL_S_L               ;move seconds to accumulator for compar
+                             ison
+0123 B40A3D          230                     CJNE    A, #10d, END_INC_TIME       ;if seconds is not max yet, jump back
+0126 754000          231                     MOV     CLKVAL_S_L, #0d             ;reset seconds low
+                     232                     
+                     233                     ;SECONDS HIGH
+0129 0541            234                     INC     CLKVAL_S_H              ;Increment second high
+012B E541            235                     MOV     A, CLKVAL_S_H           ;Move second hight to acc for comparison
+012D B40633          236                     CJNE    A, #6d, END_INC_TIME    ;Reset if it has reached max value, else ju
+                             mp back
+0130 754100          237                     MOV     CLKVAL_S_H, #0d         ;reset minutes high value
+                     238                     
+                     239                     ;MINUTES LOW
+0133 0542            240                     INC     CLKVAL_M_L              ;increment minutes low
+A51 MACRO ASSEMBLER  MAIN                                                                 11/03/2015 11:16:49 PAGE     5
+
+0135 E542            241                     MOV     A, CLKVAL_M_L           ;move for comparison
+0137 B40A29          242                     CJNE    A, #10d, END_INC_TIME   ;compare and jump if not 10
+013A 754200          243                     MOV     CLKVAL_M_L, #0d         ;reset minutes low
+                     244                     
+                     245                     ;MINUTES HIGH
+013D 0543            246                     INC     CLKVAL_M_H              ;increment minutes high
+013F E543            247                     MOV     A, CLKVAL_M_H           ;move for comparison
+0141 B4061F          248                     CJNE    A, #6d, END_INC_TIME    ;compare and jump if not 6    
+0144 754300          249                     MOV     CLKVAL_M_H, #0d         ;reset minutes high
+                     250                     
+                     251                     ;HOURS LOW
+0147 0544            252                     INC     CLKVAL_H_L              ;increment hours low
+0149 E544            253                     MOV     A, CLKVAL_H_L           ;move for comparison
+014B B4040D          254                     CJNE    A, #4d, CONTINUE_H_L    ;if its not 4, continue checkinf for 10
+014E E545            255                     MOV     A, CLKVAL_H_H           ;if its 4, move hour high to B
+0150 B40208          256                     CJNE    A, #2d, CONTINUE_H_L    ;if B is not 2, continue checking for 10
+0153 754400          257                     MOV     CLKVAL_H_L, #0d         ;if it is 2, reset hour low to 0
+0156 754500          258                     MOV     CLKVAL_H_H, #0d         ;reset hour high to 0
+0159 8008            259                     JMP     END_INC_TIME
+                     260                     
+015B B40A05          261     CONTINUE_H_L:   CJNE    A, #10d, END_INC_TIME   ;compare and jump if not 10
+015E 754400          262                     MOV     CLKVAL_H_L, #0d         ;reset hour low
+0161 0545            263                     INC     CLKVAL_H_H
+0163 22              264     END_INC_TIME:   RET                
+                     265     
+                     266     ;Update Display;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+                             ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+                     267     ;Triggered every tick, 2ms
+0164 1556            268     UPDTDISP:       DEC     CUR_DISP                        ;decrease current display pointer
+0166 E556            269                     MOV     A, CUR_DISP                     ;move curdisplay to A
+0168 B44F03          270                     CJNE    A, #DISP_0 - 1, END_UPDTDISP2   ;compare with disp0 - 1 to check if
+                              it needs to be reset
+016B 755655          271                     MOV     CUR_DISP, #DISP_5               ;reset display pointer
+016E A856            272     END_UPDTDISP2:  MOV     R0, CUR_DISP                    ;move cur display to R0
+0170 8690            273                     MOV     P1, @R0                         ;move value contained in CURDISP po
+                             inter to port 2
+                     274                     
+0172 E556            275                     MOV     A, CUR_DISP                     ;Move current display value to A
+0174 200204          276                     JB      ALARM_ENABLE, SHOW_ALR
+0177 9410            277                     SUBB    A, #10H
+0179 8002            278                     JMP     CONTUPDTDS
+017B 2410            279     SHOW_ALR:       ADD     A, #10H                         ;Add 10H to convert to Appropiate d
+                             isplay value (50H -> 60H, 51H -> 61H)
+017D F9              280     CONTUPDTDS:     MOV     R1, A                           ;Display values are contained in 60
+                             H - 65H, they match up with current transistor(CUR_DISP)
+                     281                     
+017E 7430            282                     MOV     A, #30H                         ;move 30H to A 
+0180 27              283                     ADD     A, @R1                          ;Add DISPVAL_X_X to A to get BCD va
+                             lue
+0181 F8              284                     MOV     R0, A                           ;Move value of A to R0
+0182 86A0            285                     MOV     P2, @R0                         ;Send value of BCD to Port 2
+0184 22              286     END_UPDTDISP:   RET     
+                     287     
+                     288     ;SWITCH DISPLAY ROUTINE;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+                             ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+                     289     ;Switches between Alarm display and clock display
+                     290     ;important: ALARM_ENABLE flag
+0185 753E00          291     SWITCH_DISP:    MOV     DEBOUNCER_COUNT, #0d             ;Reset debouncer counter to 0
+0188 E53E            292     RECHECK1:       MOV     A, DEBOUNCER_COUNT               ;Move counter to accumulator for c
+                             omparison
+018A B414FB          293                     CJNE    A, #20d, RECHECK1                ;Count 40 ms
+018D 30B202          294                     JNB     P3.2, EXIT_SWITCH                ;If button is not enabled, exit
+0190 B202            295                     CPL     ALARM_ENABLE                     ;if button is enabled, enable alar
+                             m display
+0192 22              296     EXIT_SWITCH:    RET
+                     297     
+A51 MACRO ASSEMBLER  MAIN                                                                 11/03/2015 11:16:49 PAGE     6
+
+                     298     ;EDIT CLOCK/ALARM VALUE;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+                             ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+                     299     ;Increments Minutes and hours on clock or alarm
+0193 753E00          300     EDIT:           MOV     DEBOUNCER_COUNT, #0d             ;Reset debouncer counter to 0
+0196 E53E            301     RECHECK2:       MOV     A, DEBOUNCER_COUNT               ;Move counter to accumulator for c
+                             omparison
+0198 B414FB          302                     CJNE    A, #20d, RECHECK2                ;Count 40 ms
+019B 30B365          303                     JNB     P3.3, EXIT_EDIT                  ;If button is not enabled still, e
+                             xit
+019E 200232          304                     JB      ALARM_ENABLE, INC_ALARM          ;check if alarm display is enabled
+                              to edit alarm or clock
+                     305                     ;Alarm display is not enabled, edit clock
+                     306                     ;INCRASE TIME VALUE BY MINUTES
+                     307                     ;MINUTES LOW
+01A1 0542            308                     INC     CLKVAL_M_L              ;increment minutes low
+01A3 E542            309                     MOV     A, CLKVAL_M_L           ;move for comparison
+01A5 B40A5B          310                     CJNE    A, #10d, EXIT_EDIT      ;compare and jump if not 10
+01A8 754200          311                     MOV     CLKVAL_M_L, #0d         ;reset minutes low
+                     312                     
+                     313                     ;MINUTES HIGH
+01AB 0543            314                     INC     CLKVAL_M_H              ;increment minutes high
+01AD E543            315                     MOV     A, CLKVAL_M_H           ;move for comparison
+01AF B40651          316                     CJNE    A, #6d, EXIT_EDIT       ;compare and jump if not 6    
+01B2 754300          317                     MOV     CLKVAL_M_H, #0d         ;reset minutes high
+                     318                     
+                     319                     ;HOURS LOW
+01B5 0544            320                     INC     CLKVAL_H_L              ;increment hours low
+01B7 E544            321                     MOV     A, CLKVAL_H_L           ;move for comparison
+01B9 B4040D          322                     CJNE    A, #4d, CONT_H_L        ;if its not 4, continue checkinf for 10
+01BC E545            323                     MOV     A, CLKVAL_H_H           ;if its 4, move hour high to B
+01BE B40208          324                     CJNE    A, #2d, CONT_H_L        ;if B is not 2, continue checking for 10
+01C1 754400          325                     MOV     CLKVAL_H_L, #0d         ;if it is 2, reset hour low to 0
+01C4 754500          326                     MOV     CLKVAL_H_H, #0d         ;reset hour high to 0
+01C7 803A            327                     JMP     EXIT_EDIT
+                     328                     
+01C9 B40A37          329     CONT_H_L:       CJNE    A, #10d, EXIT_EDIT      ;compare and jump if not 10
+01CC 754400          330                     MOV     CLKVAL_H_L, #0d         ;reset hour low
+01CF 0545            331                     INC     CLKVAL_H_H
+01D1 8030            332                     JMP     EXIT_EDIT
+01D3                 333     INC_ALARM:      ;INCRASE ALR VALUE BY MINUTES
+                     334                     ;MINUTES LOW
+01D3 0562            335                     INC     ALRVAL_M_L              ;increment minutes low
+01D5 E562            336                     MOV     A, ALRVAL_M_L           ;move for comparison
+01D7 B40A29          337                     CJNE    A, #10d, EXIT_EDIT      ;compare and jump if not 10
+01DA 756200          338                     MOV     ALRVAL_M_L, #0d         ;reset minutes low
+                     339                     
+                     340                     ;MINUTES HIGH
+01DD 0563            341                     INC     ALRVAL_M_H              ;increment minutes high
+01DF E563            342                     MOV     A, ALRVAL_M_H           ;move for comparison
+01E1 B4061F          343                     CJNE    A, #6d, EXIT_EDIT       ;compare and jump if not 6    
+01E4 756300          344                     MOV     ALRVAL_M_H, #0d         ;reset minutes high
+                     345                     
+                     346                     ;HOURS LOW
+01E7 0564            347                     INC     ALRVAL_H_L              ;increment hours low
+01E9 E564            348                     MOV     A, ALRVAL_H_L           ;move for comparison
+01EB B4040D          349                     CJNE    A, #4d, CONT_H        ;if its not 4, continue checkinf for 10
+01EE E565            350                     MOV     A, ALRVAL_H_H           ;if its 4, move hour high to B
+01F0 B40208          351                     CJNE    A, #2d, CONT_H        ;if B is not 2, continue checking for 10
+01F3 756400          352                     MOV     ALRVAL_H_L, #0d         ;if it is 2, reset hour low to 0
+01F6 756500          353                     MOV     ALRVAL_H_H, #0d         ;reset hour high to 0
+01F9 8008            354                     JMP     EXIT_EDIT
+                     355                     
+01FB B40A05          356     CONT_H:         CJNE    A, #10d, EXIT_EDIT      ;compare and jump if not 10
+01FE 756400          357                     MOV     ALRVAL_H_L, #0d         ;reset hour low
+0201 0545            358                     INC     CLKVAL_H_H                
+0203 22              359     EXIT_EDIT:      RET
+A51 MACRO ASSEMBLER  MAIN                                                                 11/03/2015 11:16:49 PAGE     7
+
+                     360     
+                     361     ;CHECK ALARM SUBROUTINE;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+                             ;;;;;;;;;;;
+                     362     ;Will check if alarm needs to be enabled/disabled
+0204 20031A          363     CHECK_ALARM:    JB      ALARM_ON, UPDT_ALARM
+                     364                     ;Check all values of ALR with CLK, if they match, activate
+0207 E562            365                     MOV     A, ALRVAL_M_L
+0209 B5422A          366                     CJNE    A, CLKVAL_M_L, EXIT_CHECK
+020C E563            367                     MOV     A, ALRVAL_M_H
+020E B54325          368                     CJNE    A, CLKVAL_M_H, EXIT_CHECK
+0211 E564            369                     MOV     A, ALRVAL_H_L
+0213 B54420          370                     CJNE    A, CLKVAL_H_L, EXIT_CHECK
+0216 E565            371                     MOV     A, ALRVAL_H_H 
+0218 B5451B          372                     CJNE    A, CLKVAL_H_H, EXIT_CHECK
+                     373                     ;Alarm and Clock have the same values, turn on alarm
+021B D203            374                     SETB    ALARM_ON
+021D C2B7            375                     CLR     P3.7                                    ;BEEP BEEP
+021F 8015            376                     JMP     EXIT_CHECK
+0221                 377     UPDT_ALARM:     ;Check if one minute has passed
+0221 E562            378                     MOV     A, ALRVAL_M_L
+0223 B54202          379                     CJNE    A, CLKVAL_M_L, CHECK_SECS
+0226 800E            380                     JMP     EXIT_CHECK
+                     381                     ;Minutes have changed, check seconds
+0228 E560            382     CHECK_SECS:     MOV     A, ALRVAL_S_L
+022A B54009          383                     CJNE    A, CLKVAL_S_L, EXIT_CHECK
+022D E561            384                     MOV     A, ALRVAL_S_H
+022F B54104          385                     CJNE    A, CLKVAL_S_H, EXIT_CHECK
+                     386                     ;Minutes and seconds are all the same, turn off alarm
+0232 D2B7            387                     SETB    P3.7                                    ;MEEP
+0234 C203            388                     CLR     ALARM_ON
+0236 22              389     EXIT_CHECK:     RET    
+                     390     
+                     391     END
+A51 MACRO ASSEMBLER  MAIN                                                                 11/03/2015 11:16:49 PAGE     8
+
+SYMBOL TABLE LISTING
+------ ----- -------
+
+
+N A M E             T Y P E  V A L U E   ATTRIBUTES
+
+ACC. . . . . . . .  D ADDR   00E0H   A   
+ALARM_ENABLE . . .  B ADDR   0020H.2 A   
+ALARM_ON . . . . .  B ADDR   0020H.3 A   
+ALRVAL_H_H . . . .  N NUMB   0065H   A   
+ALRVAL_H_L . . . .  N NUMB   0064H   A   
+ALRVAL_M_H . . . .  N NUMB   0063H   A   
+ALRVAL_M_L . . . .  N NUMB   0062H   A   
+ALRVAL_S_H . . . .  N NUMB   0061H   A   
+ALRVAL_S_L . . . .  N NUMB   0060H   A   
+CHECK_ALARM. . . .  C ADDR   0204H   A   
+CHECK_SECS . . . .  C ADDR   0228H   A   
+CLKVAL_H_H . . . .  N NUMB   0045H   A   
+CLKVAL_H_L . . . .  N NUMB   0044H   A   
+CLKVAL_M_H . . . .  N NUMB   0043H   A   
+CLKVAL_M_L . . . .  N NUMB   0042H   A   
+CLKVAL_S_H . . . .  N NUMB   0041H   A   
+CLKVAL_S_L . . . .  N NUMB   0040H   A   
+CONTINUE_H_L . . .  C ADDR   015BH   A   
+CONTUPDTDS . . . .  C ADDR   017DH   A   
+CONT_H . . . . . .  C ADDR   01FBH   A   
+CONT_H_L . . . . .  C ADDR   01C9H   A   
+CUR_DISP . . . . .  N NUMB   0056H   A   
+DEBOUNCER_COUNT. .  N NUMB   003EH   A   
+DISP_0 . . . . . .  N NUMB   0050H   A   
+DISP_1 . . . . . .  N NUMB   0051H   A   
+DISP_2 . . . . . .  N NUMB   0052H   A   
+DISP_3 . . . . . .  N NUMB   0053H   A   
+DISP_4 . . . . . .  N NUMB   0054H   A   
+DISP_5 . . . . . .  N NUMB   0055H   A   
+EDIT . . . . . . .  C ADDR   0193H   A   
+EDIT_NEW_STATE . .  B ADDR   0020H.1 A   
+EDIT_OLD_STATE . .  B ADDR   0020H.0 A   
+END_INC_TIME . . .  C ADDR   0163H   A   
+END_UPDTCLK. . . .  C ADDR   011EH   A   
+END_UPDTDISP . . .  C ADDR   0184H   A   
+END_UPDTDISP2. . .  C ADDR   016EH   A   
+EX0. . . . . . . .  B ADDR   00A8H.0 A   
+EX1. . . . . . . .  B ADDR   00A8H.2 A   
+EXIT_CHECK . . . .  C ADDR   0236H   A   
+EXIT_EDIT. . . . .  C ADDR   0203H   A   
+EXIT_EXT0IRS . . .  C ADDR   00E7H   A   
+EXIT_EXT1IRS . . .  C ADDR   00FAH   A   
+EXIT_SWITCH. . . .  C ADDR   0192H   A   
+EXIT_T2IRS . . . .  C ADDR   00D2H   A   
+EXT0IRS. . . . . .  C ADDR   00DDH   A   
+EXT1IRS. . . . . .  C ADDR   00F0H   A   
+IE . . . . . . . .  D ADDR   00A8H   A   
+INC_ALARM. . . . .  C ADDR   01D3H   A   
+INC_TIME . . . . .  C ADDR   011FH   A   
+INTERRUPTS . . . .  N NUMB   00A5H   A   
+IP . . . . . . . .  D ADDR   00B8H   A   
+P1 . . . . . . . .  D ADDR   0090H   A   
+P2 . . . . . . . .  D ADDR   00A0H   A   
+P3 . . . . . . . .  D ADDR   00B0H   A   
+PSW. . . . . . . .  D ADDR   00D0H   A   
+RCAP2H . . . . . .  N NUMB   00CBH   A   
+RCAP2L . . . . . .  N NUMB   00CAH   A   
+RECHECK1 . . . . .  C ADDR   0188H   A   
+RECHECK2 . . . . .  C ADDR   0196H   A   
+SHOW_ALR . . . . .  C ADDR   017BH   A   
+A51 MACRO ASSEMBLER  MAIN                                                                 11/03/2015 11:16:49 PAGE     9
+
+START. . . . . . .  C ADDR   0040H   A   
+SWITCH_DISP. . . .  C ADDR   0185H   A   
+T2CON. . . . . . .  N NUMB   00C8H   A   
+T2H. . . . . . . .  N NUMB   00CDH   A   
+T2IRS. . . . . . .  C ADDR   00C8H   A   
+T2L. . . . . . . .  N NUMB   00CCH   A   
+TICK . . . . . . .  C ADDR   0103H   A   
+TICKCOUNT_2. . . .  N NUMB   003AH   A   
+TICKCOUNT_250_1. .  N NUMB   003CH   A   
+TICKCOUNT_250_2. .  N NUMB   003DH   A   
+TICKCOUNT_4. . . .  N NUMB   003BH   A   
+UPDTCLK. . . . . .  C ADDR   010DH   A   
+UPDTDISP . . . . .  C ADDR   0164H   A   
+UPDT_ALARM . . . .  C ADDR   0221H   A   
+
+
+REGISTER BANK(S) USED: 0 
+
+
+ASSEMBLY COMPLETE.  0 WARNING(S), 0 ERROR(S)
